@@ -1,0 +1,5 @@
+x264 (2:0.160.3011.1+dde-deepin) stable; urgency=medium
+
+  * ['Rebuild  against by  current gcc 11.2']
+
+ -- Deepin Packages Builder <packages@deepin.org>  Wed, 10 Aug 2022 21:31:54 +0800
