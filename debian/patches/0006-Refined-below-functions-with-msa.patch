@@ -1,0 +1,194 @@
+From 3f2072c838018405a8760e4da9134cbfbefa0b3e Mon Sep 17 00:00:00 2001
+From: Zhou Peng <zhoupeng@loongson.cn>
+Date: Wed, 16 Sep 2020 17:37:29 +0800
+Subject: [PATCH 2/3]  Refined below functions with msa.
+
+ 1. sub8x8_dct8
+ 2. sub16x16_dct8
+ The optimization effect improves from 13.20 to 13.45,
+ when qp value is equal to 28.
+
+Change-Id: I1aaae035ff3f76ac0e0520e735373e30960721be
+Signed-off-by: Zhou Peng <zhoupeng@loongson.cn>
+---
+ common/dct.c        |  2 ++
+ common/mips/dct-c.c | 93 +++++++++++++++++++++++++++++++++++++++++++++++++++++
+ common/mips/dct.h   |  6 ++++
+ common/mips/mc-c.c  |  8 ++---
+ 4 files changed, 105 insertions(+), 4 deletions(-)
+
+diff --git a/common/dct.c b/common/dct.c
+index 2b56170..b428a4d 100644
+--- a/common/dct.c
++++ b/common/dct.c
+@@ -723,6 +723,8 @@ void x264_dct_init( int cpu, x264_dct_function_t *dctf )
+         dctf->add16x16_idct_dc = x264_add16x16_idct_dc_msa;
+         dctf->add8x8_idct8     = x264_add8x8_idct8_msa;
+         dctf->add16x16_idct8   = x264_add16x16_idct8_msa;
++        dctf->sub8x8_dct8      = x264_sub8x8_dct8_msa;
++        dctf->sub16x16_dct8    = x264_sub16x16_dct8_msa;
+     }
+ #endif
+ 
+diff --git a/common/mips/dct-c.c b/common/mips/dct-c.c
+index 6985a76..3ad4afa 100644
+--- a/common/mips/dct-c.c
++++ b/common/mips/dct-c.c
+@@ -523,4 +523,97 @@ void x264_zigzag_scan_4x4_frame_msa( int16_t pi_level[16], int16_t pi_dct[16] )
+ {
+     avc_zigzag_scan_4x4_frame_msa( pi_dct, pi_level );
+ }
++
++/****************************************************************************
++ * 8x8 transform:
++ ****************************************************************************/
++
++void x264_sub8x8_dct8_msa( int16_t pi_dct[64], uint8_t *p_pix1,
++                           uint8_t *p_pix2 )
++{
++    v16i8 src0, src1, src2, src3;
++    v8i16 tmp0, tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7, temp;
++    v16i8 zero = {0};
++    v8i16 s07, s16, s25, s34, d07, d16, d25, d34;
++    v8i16 a0, a1, a2, a3, a4, a5, a6, a7;
++    v8i16 shift0, shift1;
++
++    shift0 = (v8i16)__msa_fill_h(1);
++    shift1 = (v8i16)__msa_fill_h(2);
++
++#define LOAD_PIX_DATA_2(data1, data2) \
++    LD_B2( v16i8, p_pix1, FENC_STRIDE, src0, src1 ); \
++    LD_B2( v16i8, p_pix2, FDEC_STRIDE, src2, src3 ); \
++    src0 = (v16i8) __msa_ilvr_b( zero, src0); \
++    src1 = (v16i8) __msa_ilvr_b( zero, src1); \
++    src2 = (v16i8) __msa_ilvr_b( zero, src2); \
++    src3 = (v16i8) __msa_ilvr_b( zero, src3); \
++    data1 = (v8i16) src0 - (v8i16) src2; \
++    data2 = (v8i16) src1 - (v8i16) src3; \
++    p_pix1 += ( FENC_STRIDE << 1 ); \
++    p_pix2 += ( FDEC_STRIDE << 1 );
++
++    LOAD_PIX_DATA_2(tmp0, tmp1);
++    LOAD_PIX_DATA_2(tmp2, tmp3);
++    LOAD_PIX_DATA_2(tmp4, tmp5);
++    LOAD_PIX_DATA_2(tmp6, tmp7);
++
++#undef LOAD_PIX_DATA_2
++
++#define DCT8_1D_MSA \
++    s07 = tmp0 + tmp7; \
++    s16 = tmp1 + tmp6; \
++    s25 = tmp2 + tmp5; \
++    s34 = tmp3 + tmp4; \
++    a0  = s07 + s34; \
++    a1  = s16 + s25; \
++    a2  = s07 - s34; \
++    a3  = s16 - s25; \
++ \
++    d07  = tmp0 - tmp7; \
++    d16  = tmp1 - tmp6; \
++    d25  = tmp2 - tmp5; \
++    d34  = tmp3 - tmp4; \
++    temp = __msa_sra_h( d07, shift0 ); \
++    a4   = d16 + d25 + d07 + temp; \
++    temp = __msa_sra_h( d25, shift0 ); \
++    a5   = d07 - d34 - d25 - temp;\
++    temp = __msa_sra_h( d16, shift0 ); \
++    a6   = d07 + d34 - d16 - temp; \
++    temp = __msa_sra_h( d34, shift0 ); \
++    a7   = d16 - d25 + d34 + temp; \
++ \
++    tmp0 = a0 + a1; \
++    temp = __msa_sra_h( a7, shift1 ); \
++    tmp1 = a4 + temp; \
++    temp = __msa_sra_h( a3, shift0 ); \
++    tmp2 = a2 + temp; \
++    temp = __msa_sra_h( a6, shift1 ); \
++    tmp3 = a5 + temp; \
++    tmp4 = a0 -a1; \
++    temp = __msa_sra_h( a5, shift1 ); \
++    tmp5 = a6 - temp; \
++    temp = __msa_sra_h( a2, shift0 ); \
++    tmp6 = temp - a3; \
++    temp = __msa_sra_h( a4, shift1 ); \
++    tmp7 = temp - a7;
++
++    DCT8_1D_MSA;
++    TRANSPOSE8x8_H( v8i16, tmp0, tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7,
++                     tmp0, tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7);
++    DCT8_1D_MSA;
++
++#undef DCT8_1D_MSA
++
++    ST_H8( v8i16,  tmp0, tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7, &pi_dct[0], 8);
++}
++
++void x264_sub16x16_dct8_msa( int16_t pi_dct[4][64], uint8_t *p_pix1,
++                             uint8_t *p_pix2 )
++{
++    x264_sub8x8_dct8_msa( pi_dct[0], &p_pix1[0],               &p_pix2[0] );
++    x264_sub8x8_dct8_msa( pi_dct[1], &p_pix1[8],               &p_pix2[8] );
++    x264_sub8x8_dct8_msa( pi_dct[2], &p_pix1[8*FENC_STRIDE+0], &p_pix2[8*FDEC_STRIDE+0] );
++    x264_sub8x8_dct8_msa( pi_dct[3], &p_pix1[8*FENC_STRIDE+8], &p_pix2[8*FDEC_STRIDE+8] );
++}
+ #endif
+diff --git a/common/mips/dct.h b/common/mips/dct.h
+index 39c0ed5..6cbdcb3 100644
+--- a/common/mips/dct.h
++++ b/common/mips/dct.h
+@@ -40,6 +40,12 @@ void x264_add16x16_idct_msa( uint8_t *p_dst, int16_t pi_dct[16][16] );
+ void x264_add8x8_idct8_msa( uint8_t *p_dst, int16_t pi_dct[64] );
+ #define x264_add16x16_idct8_msa x264_template(add16x16_idct8_msa)
+ void x264_add16x16_idct8_msa( uint8_t *p_dst, int16_t pi_dct[4][64] );
++#define x264_sub8x8_idct8_msa x264_template(sub8x8_idct8_msa)
++void x264_sub8x8_dct8_msa( int16_t pi_dct[64], uint8_t *p_pix1,
++                           uint8_t *p_pix2 );
++#define x264_sub16x16_idct8_msa x264_template(sub16x16_idct8_msa)
++void x264_sub16x16_dct8_msa( int16_t pi_dct[4][64], uint8_t *p_pix1,
++                             uint8_t *p_pix2 );
+ #define x264_add8x8_idct_dc_msa x264_template(add8x8_idct_dc_msa)
+ void x264_add8x8_idct_dc_msa( uint8_t *p_dst, int16_t pi_dct[4] );
+ #define x264_add16x16_idct_dc_msa x264_template(add16x16_idct_dc_msa)
+diff --git a/common/mips/mc-c.c b/common/mips/mc-c.c
+index ddaec37..7532ba1 100644
+--- a/common/mips/mc-c.c
++++ b/common/mips/mc-c.c
+@@ -972,7 +972,7 @@ static void avc_biwgt_opscale_4x2_nw_msa( uint8_t *p_src1_in,
+     v16u8 in0, in1, in2, in3;
+     v8i16 temp0, temp1, temp2, temp3;
+     v16i8 zero = { 0 };
+-    v8i16 denom = __msa_ldi_h( i_log2_denom + 1 );
++    v8i16 denom = __msa_fill_h( i_log2_denom + 1 );
+ 
+     src1_wgt = __msa_fill_h( i_src1_weight );
+     src2_wgt = __msa_fill_h( i_src2_weight );
+@@ -1016,7 +1016,7 @@ static void avc_biwgt_opscale_4x4multiple_nw_msa( uint8_t *p_src1_in,
+     v16u8 src0, src1, src2, src3, src4, src5, src6, src7;
+     v8i16 temp0, temp1, temp2, temp3, temp4, temp5, temp6, temp7;
+     v16i8 zero = { 0 };
+-    v8i16 denom = __msa_ldi_h( i_log2_denom + 1 );
++    v8i16 denom = __msa_fill_h( i_log2_denom + 1 );
+ 
+     src1_wgt = __msa_fill_h( i_src1_weight );
+     src2_wgt = __msa_fill_h( i_src2_weight );
+@@ -1099,7 +1099,7 @@ static void avc_biwgt_opscale_8width_nw_msa( uint8_t *p_src1_in,
+     v8i16 temp0, temp1, temp2, temp3;
+     v8i16 res0, res1, res2, res3;
+     v16i8 zero = { 0 };
+-    v8i16 denom = __msa_ldi_h( i_log2_denom + 1 );
++    v8i16 denom = __msa_fill_h( i_log2_denom + 1 );
+ 
+     src1_wgt = __msa_fill_h( i_src1_weight );
+     src2_wgt = __msa_fill_h( i_src2_weight );
+@@ -1152,7 +1152,7 @@ static void avc_biwgt_opscale_16width_nw_msa( uint8_t *p_src1_in,
+     v8i16 temp0, temp1, temp2, temp3, temp4, temp5, temp6, temp7;
+     v8i16 res0, res1, res2, res3, res4, res5, res6, res7;
+     v16i8 zero = { 0 };
+-    v8i16 denom = __msa_ldi_h( i_log2_denom + 1 );
++    v8i16 denom = __msa_fill_h( i_log2_denom + 1 );
+ 
+     src1_wgt = __msa_fill_h( i_src1_weight );
+     src2_wgt = __msa_fill_h( i_src2_weight );
+-- 
+2.1.0
+

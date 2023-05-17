@@ -1,7 +1,7 @@
 ;*****************************************************************************
 ;* quant-a.asm: x86 quantization and level-run
 ;*****************************************************************************
-;* Copyright (C) 2005-2020 x264 project
+;* Copyright (C) 2005-2018 x264 project
 ;*
 ;* Authors: Loren Merritt <lorenm@u.washington.edu>
 ;*          Fiona Glaser <fiona@x264.com>
@@ -673,7 +673,7 @@ cglobal dequant_%1x%1_flat16, 0,3
     sub  t2d, t0d
     sub  t2d, t1d   ; i_mf = i_qp % 6
     shl  t2d, %2
-%if ARCH_X86_64
+%ifdef PIC
     lea  r1, [dequant%1_scale]
     add  r1, t2
 %else
@@ -761,7 +761,7 @@ DEQUANT 8, 6, 4
     sub  t2d, t1d   ; i_mf = i_qp % 6
     shl  t2d, %1
 %if %2
-%if ARCH_X86_64
+%ifdef PIC
 %define dmf r1+t2
     lea   r1, [dequant8_scale]
 %else
@@ -1449,7 +1449,7 @@ cglobal decimate_score%1, 1,3
     shr   edx, 1
 %endif
 %endif
-%if ARCH_X86_64
+%ifdef PIC
     lea    r4, [decimate_mask_table4]
     %define mask_table r4
 %else
@@ -1580,11 +1580,16 @@ cglobal decimate_score64, 1,5
     add   eax, r3d
     jnz .ret9
 %endif
-    lea    r4, [decimate_table8]
+%ifdef PIC
+    lea r4, [decimate_table8]
+    %define table r4
+%else
+    %define table decimate_table8
+%endif
     mov    al, -6
 .loop:
     tzcnt rcx, r1
-    add    al, byte [r4 + rcx]
+    add    al, byte [table + rcx]
     jge .ret9
     shr    r1, 1
     SHRX   r1, rcx
@@ -2160,7 +2165,7 @@ COEFF_LEVELRUN 16
 
 %macro COEFF_LEVELRUN_LUT 1
 cglobal coeff_level_run%1,2,4+(%1/9)
-%if ARCH_X86_64
+%ifdef PIC
     lea       r5, [$$]
     %define GLOBAL +r5-$$
 %else

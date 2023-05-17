@@ -1,0 +1,124 @@
+From 064fc2aaa631d951c29cd30ff23ea95a6aec130f Mon Sep 17 00:00:00 2001
+From: Zhou Peng <zhoupeng@loongson.cn>
+Date: Tue, 22 Sep 2020 15:02:08 +0800
+Subject: [PATCH 3/3] Complete the functions with MSA.
+
+1.pixel_var2_8x8
+2.pixel_var2_8x16
+The optimization effect improves from 13.45 to 13.78,
+when qp value is equal to 28.
+
+Change-Id: I83567ccc5a11ebc8a2f8c0af86a1a03c33c3e80a
+Signed-off-by: Zhou Peng <zhoupeng@loongson.cn>
+---
+ common/mips/pixel-c.c | 49 +++++++++++++++++++++++++++++++------------------
+ common/mips/pixel.h   | 10 ++++------
+ common/pixel.c        |  4 ++--
+ 3 files changed, 37 insertions(+), 26 deletions(-)
+
+diff --git a/common/mips/pixel-c.c b/common/mips/pixel-c.c
+index cdc728b..90b2c90 100644
+--- a/common/mips/pixel-c.c
++++ b/common/mips/pixel-c.c
+@@ -1444,31 +1444,44 @@ uint64_t x264_pixel_var_8x8_msa( uint8_t *p_pix, intptr_t i_stride )
+     return avc_pixel_var8width_msa( p_pix, i_stride, 8 );
+ }
+ 
+-int32_t x264_pixel_var2_8x16_msa( uint8_t *p_pix1, intptr_t i_stride1,
+-                                  uint8_t *p_pix2, intptr_t i_stride2,
+-                                  int32_t *p_ssd )
+-{
+-    int32_t i_var = 0, i_diff = 0, i_sqr = 0;
+-
+-    i_sqr = sse_diff_8width_msa( p_pix1, i_stride1, p_pix2, i_stride2, 16,
+-                                 &i_diff );
+-    i_var = VARIANCE_WxH( i_sqr, i_diff, 7 );
+-    *p_ssd = i_sqr;
++int32_t x264_pixel_var2_8x16_msa( uint8_t *p_pix1, uint8_t *p_pix2,
++                                  int32_t ssd[2] )
++{
++    int32_t i_var = 0, i_diff_u = 0, i_sqr_u = 0;
++    int32_t i_diff_v = 0, i_sqr_v = 0;
++
++    i_sqr_u = sse_diff_8width_msa( p_pix1, FENC_STRIDE,
++                                   p_pix2, FDEC_STRIDE, 16, &i_diff_u );
++    i_sqr_v = sse_diff_8width_msa( p_pix1 + (FENC_STRIDE >> 1),
++                                   FENC_STRIDE,
++                                   p_pix2 + (FDEC_STRIDE >> 1),
++                                   FDEC_STRIDE, 16, &i_diff_v );
++    i_var = VARIANCE_WxH( i_sqr_u, i_diff_u, 7 ) +
++            VARIANCE_WxH( i_sqr_v, i_diff_v, 7 );
++    ssd[0] = i_sqr_u;
++    ssd[1] = i_sqr_v;
+ 
+     return i_var;
+ }
+ 
+-int32_t x264_pixel_var2_8x8_msa( uint8_t *p_pix1, intptr_t i_stride1,
+-                                 uint8_t *p_pix2, intptr_t i_stride2,
+-                                 int32_t *p_ssd )
++int32_t x264_pixel_var2_8x8_msa( uint8_t *p_pix1, uint8_t *p_pix2,
++                                 int32_t ssd[2] )
+ {
+-    int32_t i_var = 0, i_diff = 0, i_sqr = 0;
++    int32_t i_var = 0, i_diff_u = 0, i_sqr_u = 0;
++    int32_t i_diff_v = 0, i_sqr_v = 0;
+ 
+-    i_sqr = sse_diff_8width_msa( p_pix1, i_stride1,
+-                                 p_pix2, i_stride2, 8, &i_diff );
+-    i_var = VARIANCE_WxH( i_sqr, i_diff, 6 );
+-    *p_ssd = i_sqr;
++    i_sqr_u = sse_diff_8width_msa( p_pix1, FENC_STRIDE,
++                                   p_pix2, FDEC_STRIDE, 8, &i_diff_u );
++    i_sqr_v = sse_diff_8width_msa( p_pix1 + (FENC_STRIDE >> 1),
++                                   FENC_STRIDE,
++                                   p_pix2 + (FDEC_STRIDE >> 1),
++                                   FDEC_STRIDE, 8, &i_diff_v );
++    i_var = VARIANCE_WxH( i_sqr_u, i_diff_u, 6 ) +
++            VARIANCE_WxH( i_sqr_v, i_diff_v, 6 );
++    ssd[0] = i_sqr_u;
++    ssd[1] = i_sqr_v;
+ 
+     return i_var;
+ }
++
+ #endif
+diff --git a/common/mips/pixel.h b/common/mips/pixel.h
+index 3e12b30..3deb435 100644
+--- a/common/mips/pixel.h
++++ b/common/mips/pixel.h
+@@ -217,12 +217,10 @@ uint64_t x264_pixel_var_8x16_msa( uint8_t *p_pix, intptr_t i_stride );
+ #define x264_pixel_var_8x8_msa x264_template(pixel_var_8x8_msa)
+ uint64_t x264_pixel_var_8x8_msa( uint8_t *p_pix, intptr_t i_stride );
+ #define x264_pixel_var2_8x16_msa x264_template(pixel_var2_8x16_msa)
+-int32_t x264_pixel_var2_8x16_msa( uint8_t *p_pix1, intptr_t i_stride1,
+-                                  uint8_t *p_pix2, intptr_t i_stride2,
+-                                  int32_t *p_ssd );
++int32_t x264_pixel_var2_8x16_msa( uint8_t *p_pix1, uint8_t *p_pix2,
++                                  int32_t ssd[2] );
+ #define x264_pixel_var2_8x8_msa x264_template(pixel_var2_8x8_msa)
+-int32_t x264_pixel_var2_8x8_msa( uint8_t *p_pix1, intptr_t i_stride1,
+-                                 uint8_t *p_pix2, intptr_t i_stride2,
+-                                 int32_t *p_ssd );
++int32_t x264_pixel_var2_8x8_msa( uint8_t *p_pix1, uint8_t *p_pix2,
++                                 int32_t ssd[2] );
+ 
+ #endif
+diff --git a/common/pixel.c b/common/pixel.c
+index 2e3bea3..9c3a54e 100644
+--- a/common/pixel.c
++++ b/common/pixel.c
+@@ -1502,8 +1502,8 @@ void x264_pixel_init( int cpu, x264_pixel_function_t *pixf )
+         pixf->var[PIXEL_16x16] = x264_pixel_var_16x16_msa;
+         pixf->var[PIXEL_8x16]  = x264_pixel_var_8x16_msa;
+         pixf->var[PIXEL_8x8]   = x264_pixel_var_8x8_msa;
+-      //pixf->var2[PIXEL_8x16]  = x264_pixel_var2_8x16_msa;
+-      //pixf->var2[PIXEL_8x8]   = x264_pixel_var2_8x8_msa;
++        pixf->var2[PIXEL_8x16]  = x264_pixel_var2_8x16_msa;
++        pixf->var2[PIXEL_8x8]   = x264_pixel_var2_8x8_msa;
+         pixf->sa8d[PIXEL_16x16] = x264_pixel_sa8d_16x16_msa;
+         pixf->sa8d[PIXEL_8x8]   = x264_pixel_sa8d_8x8_msa;
+     }
+-- 
+2.1.0
+

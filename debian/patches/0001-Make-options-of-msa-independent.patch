@@ -1,0 +1,68 @@
+From 415bc8a1daf1cf06544069786f1f495bf57ead94 Mon Sep 17 00:00:00 2001
+From: zhoupeng <zhoupeng@loongson.cn>
+Date: Tue, 8 Sep 2020 20:13:04 +0800
+Subject: [PATCH 1/8] Make options of msa independent.
+
+Change-Id: I330df77c1482215430638fb9c5dd4de07da65dc4
+Signed-off-by: Zhou Peng <zhoupeng@loongson.cn>
+---
+ Makefile  |  9 +++++++++
+ configure | 14 ++++----------
+ 2 files changed, 13 insertions(+), 10 deletions(-)
+
+diff --git a/Makefile b/Makefile
+index 8ec1405..e4aa900 100644
+--- a/Makefile
++++ b/Makefile
+@@ -282,6 +282,15 @@ $(OBJS) $(OBJASM) $(OBJSO) $(OBJCLI) $(OBJCHK) $(OBJCHK_8) $(OBJCHK_10) $(OBJEXA
+ %-10.o: %.c
+ 	$(CC) $(CFLAGS) -c $< $(CC_O) -DHIGH_BIT_DEPTH=1 -DBIT_DEPTH=10
+ 
++common/mips/%-c.o: common/mips/%-c.c
++	$(CC) $(CFLAGS) $(MSA_CFLAGS) -c -o $@ $<
++
++common/mips/%-c-8.o: common/mips/%-c.c
++	$(CC) $(CFLAGS) $(MSA_CFLAGS) -c -o $@ $< -DHIGH_BIT_DEPTH=0 -DBIT_DEPTH=8
++
++common/mips/%-c-10.o: common/mips/%-c.c
++	$(CC) $(CFLAGS) $(MSA_CFLAGS) -c -o $@ $< -DHIGH_BIT_DEPTH=1 -DBIT_DEPTH=10
++
+ %.o: %.asm common/x86/x86inc.asm common/x86/x86util.asm
+ 	$(AS) $(ASFLAGS) -o $@ $<
+ 	-@ $(if $(STRIP), $(STRIP) -x $@) # delete local/anonymous symbols, so they don't show up in oprofile
+diff --git a/configure b/configure
+index 3063cd7..433dbc8 100755
+--- a/configure
++++ b/configure
+@@ -968,17 +968,10 @@ if [ $asm = auto -a \( $ARCH = ARM -o $ARCH = AARCH64 \) ] ; then
+ fi
+ 
+ if [ $asm = auto -a $ARCH = MIPS ] ; then
+-    if ! echo $CFLAGS | grep -Eq '(-march|-mmsa|-mno-msa)' ; then
+-        cc_check '' '-mmsa -mfp64 -mhard-float' && CFLAGS="-mmsa -mfp64 -mhard-float $CFLAGS"
+-    fi
+-
+-    if cc_check '' '' '__asm__("addvi.b $w0, $w1, 1");' ; then
++    if cc_check 'msa.h' '-mmsa -mfp64 -mhard-float' '__asm__("addvi.b $w0, $w1, 1");' ; then
++        MSA_CFLAGS="-mmsa -mfp64 -mhard-float"             
+         define HAVE_MSA
+-    else
+-        echo "You specified a pre-MSA CPU in your CFLAGS."
+-        echo "If you really want to run on such a CPU, configure with --disable-asm."
+-        exit 1
+-    fi
++    fi 
+ fi
+ 
+ [ $asm = no ] && AS=""
+@@ -1441,6 +1434,7 @@ SYS_ARCH=$ARCH
+ SYS=$SYS
+ CC=$CC
+ CFLAGS=$CFLAGS
++MSA_CFLAGS=$MSA_CFLAGS
+ COMPILER=$compiler
+ COMPILER_STYLE=$compiler_style
+ DEPMM=$DEPMM
+-- 
+2.1.0
+

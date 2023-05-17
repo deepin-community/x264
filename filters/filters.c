@@ -1,7 +1,7 @@
 /*****************************************************************************
  * filters.c: common filter functions
  *****************************************************************************
- * Copyright (C) 2010-2020 x264 project
+ * Copyright (C) 2010-2018 x264 project
  *
  * Authors: Diogo Franco <diogomfranco@gmail.com>
  *          Steven Walters <kemuri9@gmail.com>
@@ -31,8 +31,7 @@
 
 char **x264_split_options( const char *opt_str, const char * const *options )
 {
-    int opt_count = 0, options_count = 0, found_named = 0;
-    size_t size = 0;
+    int opt_count = 0, options_count = 0, found_named = 0, size = 0;
     const char *opt = opt_str;
 
     if( !opt_str )
@@ -43,7 +42,7 @@ char **x264_split_options( const char *opt_str, const char * const *options )
 
     do
     {
-        size_t length = strcspn( opt, "=," );
+        int length = strcspn( opt, "=," );
         if( opt[length] == '=' )
         {
             const char * const *option = options;
@@ -64,7 +63,7 @@ char **x264_split_options( const char *opt_str, const char * const *options )
         opt += length;
     } while( *opt++ );
 
-    size_t offset = 2 * (opt_count+1) * sizeof(char*);
+    int offset = 2 * (opt_count+1) * sizeof(char*);
     size += offset + (opt - opt_str);
     char **opts = calloc( 1, size );
     RETURN_IF_ERROR( !opts, "malloc failed\n" );
@@ -78,7 +77,7 @@ do {\
 
     for( int i = 0; i < 2*opt_count; )
     {
-        size_t length = strcspn( opt_str, "=," );
+        int length = strcspn( opt_str, "=," );
         if( opt_str[length] == '=' )
         {
             insert_opt( opt_str, length );
@@ -87,7 +86,7 @@ do {\
         else
         {
             const char *option = options[i/2];
-            size_t option_length = strlen( option );
+            int option_length = strlen( option );
             insert_opt( option, option_length );
         }
         insert_opt( opt_str, length );

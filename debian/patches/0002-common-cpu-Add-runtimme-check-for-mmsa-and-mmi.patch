@@ -1,0 +1,59 @@
+From 8ac48c48f91ef55dd4944da0efadc096ac84be43 Mon Sep 17 00:00:00 2001
+From: Yin Shiyou <yinshiyou-hf@loongson.cn>
+Date: Mon, 17 Feb 2020 17:10:19 +0800
+Subject: [PATCH 2/4] common/cpu: Add runtimme check for mmsa and mmi.
+
+Analysis cpuinfo in 'x264_cpu_detect'.
+
+Change-Id: I13a6da5c986b2cec7591eae9be9ee45543510f9f
+Signed-off-by: Zhou Peng <zhoupeng@loongson.cn>
+---
+ common/cpu.c | 32 ++++++++++++++++++++++++++++----
+ 1 file changed, 28 insertions(+), 4 deletions(-)
+
+diff --git a/common/cpu.c b/common/cpu.c
+index 9a545e0..e52d3a2 100644
+--- a/common/cpu.c
++++ b/common/cpu.c
+@@ -412,10 +412,34 @@ uint32_t x264_cpu_detect( void )
+ uint32_t x264_cpu_detect( void )
+ {
+     uint32_t flags = 0;
+-#if HAVE_MSA
+-    flags |= X264_CPU_MSA;
+-#endif
+-    return flags;
++    char buf[1024];
++
++# ifdef __linux__
++    FILE* fp = fopen("/proc/cpuinfo", "r");
++    if (!fp)
++        return flags;
++
++    memset(buf, 0, sizeof(buf));
++    while (fgets(buf, sizeof(buf), fp)) {
++        if (!strncmp(buf, "cpu model", strlen("cpu model"))) {
++            /* In case of some kernel havn't add loongson extention in ASEs implemented,
++             * analysis cpu model is still needed.
++             */
++            if (strstr(buf, "Loongson-2K")) {
++                flags |= X264_CPU_MSA;
++            }
++        }
++        if (!strncmp(buf, "ASEs implemented", strlen("ASEs implemented"))) {
++            if (strstr(buf, "msa")) {
++                flags |= X264_CPU_MSA;
++            }
++            break;
++        }
++    }
++
++    fclose(fp);
++# endif
++     return flags;
+ }
+ 
+ #else
+--
+2.1.0
+

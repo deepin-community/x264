@@ -2,6 +2,10 @@
 # vi:syntax=make
 # configure flags logic
 
+ifneq (,$(filter loongarch32 loongarch64,$(DEB_HOST_GNU_CPU)))
+-CFLAGS += -O3
+endif
+
 extra_cflags = $(CFLAGS) $(CPPFLAGS)
 
 LDFLAGS := $(filter-out %-Bsymbolic-functions,$(LDFLAGS))
@@ -19,6 +23,10 @@ endif
 
 ifneq (,$(filter stage1,$(DEB_BUILD_PROFILES)))
 common_confflags += --disable-avs --disable-ffms --disable-gpac
+endif
+
+ifneq (,$(filter loongarch32 loongarch64,$(DEB_HOST_GNU_CPU)))
+common_confflags += --enable-pic --disable-ffms
 endif
 
 # XXX why isn't --enable-visualize used in the static build?
@@ -115,9 +123,9 @@ endif
 # MIPS upstream arch, mips, mipsel and mips64el Debian arches; no upstream flags by
 # default
 ifneq (,$(filter mips mipsel mips64el,$(DEB_HOST_GNU_CPU)))
-shared_confflags += --disable-asm
-static_confflags += --disable-asm
-opt_confflags += --disable-asm
+#shared_confflags += --disable-asm
+#static_confflags += --disable-asm
+#opt_confflags += --disable-asm
 endif
 
 # ARM upsteam arch, arm, armeb, and armel Debian arches; upstream prepends -O3

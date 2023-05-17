@@ -1,7 +1,7 @@
 /*****************************************************************************
  * cpu.c: cpu detection
  *****************************************************************************
- * Copyright (C) 2003-2020 x264 project
+ * Copyright (C) 2003-2018 x264 project
  *
  * Authors: Loren Merritt <lorenm@u.washington.edu>
  *          Laurent Aimar <fenrir@via.ecp.fr>
@@ -45,7 +45,7 @@
 
 const x264_cpu_name_t x264_cpu_names[] =
 {
-#if ARCH_X86 || ARCH_X86_64
+#if HAVE_MMX
 //  {"MMX",         X264_CPU_MMX},  // we don't support asm on mmx1 cpus anymore
 #define MMX2 X264_CPU_MMX|X264_CPU_MMX2
     {"MMX2",        MMX2},
@@ -97,7 +97,7 @@ const x264_cpu_name_t x264_cpu_names[] =
     {"", 0},
 };
 
-#if (HAVE_ALTIVEC && SYS_LINUX) || (HAVE_ARMV6 && !HAVE_NEON)
+#if (ARCH_PPC && SYS_LINUX) || (ARCH_ARM && !HAVE_NEON)
 #include <signal.h>
 #include <setjmp.h>
 static sigjmp_buf jmpbuf;
@@ -298,7 +298,7 @@ uint32_t x264_cpu_detect( void )
     return cpu;
 }
 
-#elif HAVE_ALTIVEC
+#elif ARCH_PPC && HAVE_ALTIVEC
 
 #if SYS_MACOSX || SYS_OPENBSD || SYS_FREEBSD
 #include <sys/sysctl.h>
@@ -355,14 +355,15 @@ uint32_t x264_cpu_detect( void )
 }
 #endif
 
-#elif HAVE_ARMV6
+#elif ARCH_ARM
 
 void x264_cpu_neon_test( void );
 int x264_cpu_fast_neon_mrc_test( void );
 
 uint32_t x264_cpu_detect( void )
 {
-    uint32_t flags = 0;
+    int flags = 0;
+#if HAVE_ARMV6
     flags |= X264_CPU_ARMV6;
 
     // don't do this hack if compiled with -mfpu=neon
@@ -395,25 +396,26 @@ uint32_t x264_cpu_detect( void )
     flags |= x264_cpu_fast_neon_mrc_test() ? X264_CPU_FAST_NEON_MRC : 0;
 #endif
     // TODO: write dual issue test? currently it's A8 (dual issue) vs. A9 (fast mrc)
+#endif
     return flags;
 }
 
-#elif HAVE_AARCH64
+#elif ARCH_AARCH64
 
 uint32_t x264_cpu_detect( void )
 {
-#if HAVE_NEON
     return X264_CPU_ARMV8 | X264_CPU_NEON;
-#else
-    return X264_CPU_ARMV8;
-#endif
 }
 
-#elif HAVE_MSA
+#elif ARCH_MIPS
 
 uint32_t x264_cpu_detect( void )
 {
-    return X264_CPU_MSA;
+    uint32_t flags = 0;
+#if HAVE_MSA
+    flags |= X264_CPU_MSA;
+#endif
+    return flags;
 }
 
 #else
@@ -449,7 +451,7 @@ int x264_cpu_num_processors( void )
     return CPU_COUNT(&p_aff);
 #else
     int np = 0;
-    for( size_t bit = 0; bit < 8 * sizeof(p_aff); bit++ )
+    for( unsigned int bit = 0; bit < 8 * sizeof(p_aff); bit++ )
         np += (((uint8_t *)&p_aff)[bit / 8] >> (bit % 8)) & 1;
     return np;
 #endif

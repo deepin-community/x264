@@ -1,0 +1,90 @@
+From e88c40288f8df3e090fe3ae025aa03d78ed57989 Mon Sep 17 00:00:00 2001
+From: Yin Shiyou <yinshiyou-hf@loongson.cn>
+Date: Thu, 20 Feb 2020 11:45:36 +0800
+Subject: [PATCH 3/4] mips/pixel-c.c: optimize pixel_satd_8width_msa.
+
+This optimization speed up about 5%(11.70fps==>12.35fps) in case of '--qp 28'.
+
+Change-Id: I299e1458b04b4c3859865ceaabb63732786d3861
+Signed-off-by: Zhou Peng <zhoupeng@loongson.cn>
+---
+ common/mips/pixel-c.c | 41 +++++++++++++++++++++--------------------
+ 1 file changed, 21 insertions(+), 20 deletions(-)
+
+diff --git a/common/mips/pixel-c.c b/common/mips/pixel-c.c
+index 46ff14b..1975d1e 100644
+--- a/common/mips/pixel-c.c
++++ b/common/mips/pixel-c.c
+@@ -753,18 +753,20 @@ static int32_t pixel_satd_8width_msa( uint8_t *p_src, int32_t i_src_stride,
+ {
+     int32_t cnt;
+     uint32_t u_sum = 0;
++    int32_t src_stride_4x = i_src_stride << 2;
++    int32_t ref_stride_4x = i_ref_stride << 2;
+     v16i8 src0, src1, src2, src3;
+     v16i8 ref0, ref1, ref2, ref3;
+-    v8i16 zero = { 0 };
++    v8i16 sum = { 0 };
+     v8i16 diff0, diff1, diff2, diff3, diff4, diff5, diff6, diff7;
+     v8i16 temp0, temp1, temp2, temp3;
+ 
+     for( cnt = i_height >> 2; cnt--; )
+     {
+         LD_SB4( p_src, i_src_stride, src0, src1, src2, src3 );
+-        p_src += 4 * i_src_stride;
++        p_src += src_stride_4x;
+         LD_SB4( p_ref, i_ref_stride, ref0, ref1, ref2, ref3 );
+-        p_ref += 4 * i_ref_stride;
++        p_ref += ref_stride_4x;
+ 
+         ILVR_B4_SH( src0, ref0, src1, ref1, src2, ref2, src3, ref3,
+                     diff0, diff1, diff2, diff3 );
+@@ -772,29 +774,28 @@ static int32_t pixel_satd_8width_msa( uint8_t *p_src, int32_t i_src_stride,
+         TRANSPOSE8X4_SH_SH( diff0, diff1, diff2, diff3,
+                             diff0, diff2, diff4, diff6 );
+ 
+-        diff1 = ( v8i16 ) __msa_splati_d( ( v2i64 ) diff0, 1 );
+-        diff3 = ( v8i16 ) __msa_splati_d( ( v2i64 ) diff2, 1 );
+-        diff5 = ( v8i16 ) __msa_splati_d( ( v2i64 ) diff4, 1 );
+-        diff7 = ( v8i16 ) __msa_splati_d( ( v2i64 ) diff6, 1 );
+-
+-        BUTTERFLY_4( diff0, diff2, diff3, diff1, temp0, temp2, temp3, temp1 );
++        diff1 = ( v8i16 ) __msa_ilvr_d( ( v2i64 ) diff4,  ( v2i64 ) diff0 );
++        diff3 = ( v8i16 ) __msa_ilvl_d( ( v2i64 ) diff4,  ( v2i64 ) diff0 );
++        diff5 = ( v8i16 ) __msa_ilvr_d( ( v2i64 ) diff6,  ( v2i64 ) diff2 );
++        diff7 = ( v8i16 ) __msa_ilvl_d( ( v2i64 ) diff6,  ( v2i64 ) diff2 );
++        BUTTERFLY_4( diff1, diff5, diff7, diff3, temp0, temp2, temp3, temp1 );
+         BUTTERFLY_4( temp0, temp1, temp3, temp2, diff0, diff1, diff3, diff2 );
+-        BUTTERFLY_4( diff4, diff6, diff7, diff5, temp0, temp2, temp3, temp1 );
+-        BUTTERFLY_4( temp0, temp1, temp3, temp2, diff4, diff5, diff7, diff6 );
+-        TRANSPOSE4X8_SH_SH( diff0, diff1, diff2, diff3, diff4, diff5, diff6,
+-                            diff7, diff0, diff1, diff2, diff3, diff4, diff5,
+-                            diff6, diff7 );
++        TRANSPOSE8X4_SH_SH( diff0, diff1, diff2, diff3,
++                            diff4, diff5, diff6, diff7 );
++        diff0 = ( v8i16 ) __msa_ilvr_d( ( v2i64 ) diff6,  ( v2i64 ) diff4 );
++        diff1 = ( v8i16 ) __msa_ilvl_d( ( v2i64 ) diff6,  ( v2i64 ) diff4 );
++        diff2 = ( v8i16 ) __msa_ilvr_d( ( v2i64 ) diff7,  ( v2i64 ) diff5 );
++        diff3 = ( v8i16 ) __msa_ilvl_d( ( v2i64 ) diff7,  ( v2i64 ) diff5 );
++
+         BUTTERFLY_4( diff0, diff2, diff3, diff1, temp0, temp2, temp3, temp1 );
+         BUTTERFLY_4( temp0, temp1, temp3, temp2, diff0, diff1, diff3, diff2 );
+ 
+-        diff0 = __msa_add_a_h( diff0, zero );
+-        diff1 = __msa_add_a_h( diff1, zero );
+-        diff2 = __msa_add_a_h( diff2, zero );
+-        diff3 = __msa_add_a_h( diff3, zero );
+-        diff0 = ( diff0 + diff1 + diff2 + diff3 );
+-        u_sum += HADD_UH_U32( diff0 );
++        diff0 = __msa_add_a_h( diff0, diff1 );
++        diff2 = __msa_add_a_h( diff2, diff3 );
++        sum += ( diff0 + diff2 );
+     }
+ 
++    u_sum = HADD_UH_U32( sum );
+     return ( u_sum >> 1 );
+ }
+ 
+-- 
+2.1.0
+

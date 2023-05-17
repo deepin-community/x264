@@ -1,0 +1,127 @@
+From 1fa649c6f19a1f8dc9b965db7c47abb6e111aa38 Mon Sep 17 00:00:00 2001
+From: Yin Shiyou <yinshiyou-hf@loongson>
+Date: Thu, 27 Feb 2020 18:05:20 +0800
+Subject: [PATCH 4/4] mips/pixel-c.c: refined three functions.
+
+1. pixel_satd_4width_msa
+2. sa8d_8x8_msa
+3. pixel_hadamard_ac_8x8_msa
+
+Change-Id: I50f8d178c7e31ec5532374ae6a5cdccaf5023469
+Signed-off-by: Zhou Peng <zhoupeng@loongson.cn>
+---
+ common/mips/pixel-c.c | 60 ++++++++++++++++++---------------------------------
+ 1 file changed, 21 insertions(+), 39 deletions(-)
+
+diff --git a/common/mips/pixel-c.c b/common/mips/pixel-c.c
+index 1975d1e..cdc728b 100644
+--- a/common/mips/pixel-c.c
++++ b/common/mips/pixel-c.c
+@@ -711,7 +711,6 @@ static int32_t pixel_satd_4width_msa( uint8_t *p_src, int32_t i_src_stride,
+     uint32_t u_sum = 0;
+     v16i8 src0, src1, src2, src3;
+     v16i8 ref0, ref1, ref2, ref3;
+-    v8i16 zero = { 0 };
+     v8i16 diff0, diff1, diff2, diff3;
+     v8i16 temp0, temp1, temp2, temp3;
+ 
+@@ -734,11 +733,9 @@ static int32_t pixel_satd_4width_msa( uint8_t *p_src, int32_t i_src_stride,
+         BUTTERFLY_4( diff0, diff2, diff3, diff1, temp0, temp2, temp3, temp1 );
+         BUTTERFLY_4( temp0, temp1, temp3, temp2, diff0, diff1, diff3, diff2 );
+ 
+-        diff0 = __msa_add_a_h( diff0, zero );
+-        diff1 = __msa_add_a_h( diff1, zero );
+-        diff2 = __msa_add_a_h( diff2, zero );
+-        diff3 = __msa_add_a_h( diff3, zero );
+-        diff0 = ( diff0 + diff1 + diff2 + diff3 );
++        diff0 = __msa_add_a_h( diff0, diff1 );
++        diff2 = __msa_add_a_h( diff2, diff3 );
++        diff0 += diff2;
+         diff0 = ( v8i16 ) __msa_hadd_u_w( ( v8u16 ) diff0, ( v8u16 ) diff0 );
+         diff0 = ( v8i16 ) __msa_hadd_u_d( ( v4u32 ) diff0, ( v4u32 ) diff0 );
+         u_sum += __msa_copy_u_w( ( v4i32 ) diff0, 0 );
+@@ -805,7 +802,6 @@ static int32_t sa8d_8x8_msa( uint8_t *p_src, int32_t i_src_stride,
+     uint32_t u_sum = 0;
+     v16i8 src0, src1, src2, src3, src4, src5, src6, src7;
+     v16i8 ref0, ref1, ref2, ref3, ref4, ref5, ref6, ref7;
+-    v8i16 zero = { 0 };
+     v8i16 diff0, diff1, diff2, diff3, diff4, diff5, diff6, diff7;
+     v8i16 sub0, sub1, sub2, sub3, sub4, sub5, sub6, sub7;
+     v8i16 temp0, temp1, temp2, temp3;
+@@ -838,15 +834,15 @@ static int32_t sa8d_8x8_msa( uint8_t *p_src, int32_t i_src_stride,
+     temp2 = diff2 + diff6;
+     temp3 = diff3 + diff7;
+ 
+-    temp0 = __msa_add_a_h( temp0, zero );
+-    temp1 = __msa_add_a_h( temp1, zero );
+-    temp2 = __msa_add_a_h( temp2, zero );
+-    temp3 = __msa_add_a_h( temp3, zero );
++    diff0 = __msa_asub_s_h( diff0, diff4 );
++    diff1 = __msa_asub_s_h( diff1, diff5 );
++    diff2 = __msa_asub_s_h( diff2, diff6 );
++    diff3 = __msa_asub_s_h( diff3, diff7 );
++    diff0 = __msa_add_a_h( diff0, temp0 );
++    diff1 = __msa_add_a_h( diff1, temp1 );
++    diff2 = __msa_add_a_h( diff2, temp2 );
++    diff3 = __msa_add_a_h( diff3, temp3 );
+ 
+-    diff0 = temp0 + __msa_asub_s_h( diff0, diff4 );
+-    diff1 = temp1 + __msa_asub_s_h( diff1, diff5 );
+-    diff2 = temp2 + __msa_asub_s_h( diff2, diff6 );
+-    diff3 = temp3 + __msa_asub_s_h( diff3, diff7 );
+     diff0 = ( diff0 + diff1 + diff2 + diff3 );
+ 
+     u_sum = HADD_UH_U32( diff0 );
+@@ -896,19 +892,12 @@ static uint64_t pixel_hadamard_ac_8x8_msa( uint8_t *p_pix, int32_t i_stride )
+     tmp2 = diff4[0];
+     tmp3 = diff4[4];
+ 
+-    sub0 = __msa_add_a_h( diff0, zero );
+-    sub1 = __msa_add_a_h( diff1, zero );
+-    sub2 = __msa_add_a_h( diff2, zero );
+-    sub3 = __msa_add_a_h( diff3, zero );
+-    sub4 = __msa_add_a_h( diff4, zero );
+-    sub5 = __msa_add_a_h( diff5, zero );
+-    sub6 = __msa_add_a_h( diff6, zero );
+-    sub7 = __msa_add_a_h( diff7, zero );
+-
+-    sub0 = ( sub0 + sub1 + sub2 + sub3 );
+-    sub1 = ( sub4 + sub5 + sub6 + sub7 );
+-    sub0 += sub1;
++    sub0 = __msa_add_a_h( diff0, diff1 );
++    sub2 = __msa_add_a_h( diff2, diff3 );
++    sub4 = __msa_add_a_h( diff4, diff5 );
++    sub6 = __msa_add_a_h( diff6, diff7 );
+ 
++    sub0 = ( sub0 + sub2 + sub4 + sub6 );
+     u_sum4 += HADD_UH_U32( sub0 );
+ 
+     TRANSPOSE8x8_SH_SH( diff0, diff1, diff2, diff3, diff4, diff5, diff6, diff7,
+@@ -927,19 +916,12 @@ static uint64_t pixel_hadamard_ac_8x8_msa( uint8_t *p_pix, int32_t i_stride )
+     BUTTERFLY_4( diff4, diff6, diff7, diff5, temp0, temp2, temp3, temp1 );
+     BUTTERFLY_4( temp0, temp1, temp3, temp2, diff4, diff5, diff7, diff6 );
+ 
+-    sub0 = __msa_add_a_h( diff0, zero );
+-    sub1 = __msa_add_a_h( diff1, zero );
+-    sub2 = __msa_add_a_h( diff2, zero );
+-    sub3 = __msa_add_a_h( diff3, zero );
+-    sub4 = __msa_add_a_h( diff4, zero );
+-    sub5 = __msa_add_a_h( diff5, zero );
+-    sub6 = __msa_add_a_h( diff6, zero );
+-    sub7 = __msa_add_a_h( diff7, zero );
+-
+-    sub0 = ( sub0 + sub1 + sub2 + sub3 );
+-    sub1 = ( sub4 + sub5 + sub6 + sub7 );
+-    sub0 += sub1;
++    sub0 = __msa_add_a_h( diff0, diff1 );
++    sub2 = __msa_add_a_h( diff2, diff3 );
++    sub4 = __msa_add_a_h( diff4, diff5 );
++    sub6 = __msa_add_a_h( diff6, diff7 );
+ 
++    sub0 = ( sub0 + sub2 + sub4 + sub6 );
+     u_sum8 += HADD_UH_U32( sub0 );
+ 
+     u_dc = ( uint16_t ) ( tmp0 + tmp1 + tmp2 + tmp3 );
+-- 
+2.1.0
+
