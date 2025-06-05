@@ -144,6 +144,10 @@ shared_confflags += --disable-asm
 endif
 endif
 
+# sw64 arch flags
+ifneq (,$(filter sw64 sw_64,$(DEB_HOST_GNU_CPU)))
+extra_cflags += -fPIC
+endif
 # S390 upstream arch, s390 and s390x Debian arches; no upstream flags by
 # default
 #ifneq (,$(filter s390 s390x,$(DEB_HOST_GNU_CPU)))
