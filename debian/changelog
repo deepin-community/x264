@@ -1,3 +1,9 @@
+x264 (2:0.160.3011.1+dde-deepin2) unstable; urgency=medium
+
+  * fix(x264): CVE-2025-25467
+
+ -- hudeng <hudeng@deepin.org>  Fri, 15 May 2026 09:42:39 +0800
+
 x264 (2:0.160.3011.1+dde-deepin1) unstable; urgency=medium
 
   * feat: add sw64 support.
